@@ -14,6 +14,7 @@ setup(
     url='https://github.com/mapzen/py-mapzen-whosonfirst-mitie',
     install_requires=[
         'mapzen.whosonfirst.placetypes',
+        'mapzen.whosonfirst.search',
         ],
     dependency_links=[
         ],
