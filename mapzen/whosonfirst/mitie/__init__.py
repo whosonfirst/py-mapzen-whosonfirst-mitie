@@ -9,6 +9,7 @@ import mapzen.whosonfirst.placetypes
 
 import mitie
 
+import copy
 import logging
 
 class ner_phrase:
@@ -28,7 +29,7 @@ class ner_phrase:
 
             parts.append(p)
 
-        # logging.info("adding %s as a ner phrase" % parts)
+        logging.info("adding %s as a ner phrase" % parts)
         self.parts = parts
 
     def __repr__(self):
@@ -70,26 +71,54 @@ class ner_trainer:
             logging.warning("I don't know how to generate phrases for this placetype")
             return
 
+        wofid = props['wof:id']
         name = props['wof:name']
+        
         tags = props.get('wof:tags', props.get('sg:tags', []))
 
         # pull in place names for the hierarchy/ies
         # generate and yield a bunch of phrase objects (above)
 
-        for t in tags:
+        hiers = props.get('wof:hierarchy', [])
 
-            # See the way we're not splitting names or anything...
-            # Yeah, that (20150923/thisisaaronland)
+        for t in tags:
 
             parts = [
                 "I", "am", "going", "to",
-                (name, xrange(4, 6), "venue"),
+                (name, xrange(4, 5), "venue"),
                 "which", "is", "a",
-                (t, xrange(8, 10), "tag"),
-                "."
+                (t, xrange(8, 9), "tag"),                
             ]
 
             yield ner_phrase(parts)
+
+            for h in hiers:
+            
+                for pt, p_id in h.items():
+
+                    if int(p_id) == int(wofid):
+                        continue
+
+                    pt = pt.replace("_id", "")
+                    pl = self.get_by_id(p_id)
+                    
+                    if not pl:
+                        continue
+
+                    pl_props = pl['properties']
+                    pl_name = pl_props['wof:name']
+
+                    # UGH ENCODING...
+
+                    l_parts = copy.deepcopy(parts)
+
+                    l_parts.append("in")
+                    l_parts.append("the")
+                    l_parts.append((pt, xrange(11,12), "placetype"))
+                    l_parts.append("of")
+                    l_parts.append((pl_name, xrange(13,14), pt))
+
+                    yield ner_phrase(l_parts)
 
     def add_phrase(self, phrase):
 
@@ -150,6 +179,27 @@ class ner_trainer_es(ner_trainer):
                 self.index_feature(row)
 
         self.search(body, index_rows, **kwargs)
+
+    def get_by_id(self, id):
+
+        query = {
+            'ids': {
+                'values': [id]
+            }
+        }
+        
+        body = {
+            'query': query
+        }
+        
+        rsp = self.es.search(body)
+        docs = rsp['rows']
+
+        try:
+            return docs[0]
+        except Exception, e:
+            logging.error("failed to retrieve %s" % id)
+            return None
 
     def search(self, body, cb, **kwargs):
 
